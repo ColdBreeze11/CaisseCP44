@@ -20,29 +20,45 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--text);font:17px -apple-system,system-ui,"Segoe UI",sans-serif}
 header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--card);border-bottom:1px solid var(--line);padding:10px 14px;z-index:5}
 .top{display:flex;justify-content:space-between;align-items:center}
-header span{color:var(--muted);font-size:14px}
+header span{color:var(--muted);font-size:16px}
 #total{font-size:30px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
-#diff{margin-top:6px;padding:6px 10px;border-radius:8px;font-weight:700;text-align:center;display:none;font-variant-numeric:tabular-nums}
+#diff{margin-top:6px;padding:6px 10px;border-radius:8px;font-weight:700;font-size:18px;text-align:center;display:none;font-variant-numeric:tabular-nums}
 #diff.ok{display:block;color:var(--accent);border:1px solid var(--accent)}
 #diff.off{display:block;color:var(--bad);border:1px solid var(--bad)}
 main{padding:8px 10px 40px;max-width:520px;margin:0 auto}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 6px 6px;display:flex;justify-content:space-between}
+h2{font-size:19px;text-transform:uppercase;letter-spacing:.05em;color:var(--text);margin:24px 6px 8px;display:flex;justify-content:space-between;align-items:baseline}
+h2 span:last-child{color:var(--accent);font-variant-numeric:tabular-nums}
 .card{background:var(--card);border-radius:12px;overflow:hidden}
-.row{display:grid;grid-template-columns:1fr 84px 100px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.row{display:grid;grid-template-columns:1fr 84px 112px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
 .row:last-child{border-bottom:0}
 .lbl{font-weight:600}
 .lbl small{display:block;color:var(--muted);font-weight:400;font-size:12px}
 input{width:100%;font-size:20px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);text-align:center}
-.amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:19px}
 .amt.zero{color:var(--muted);font-weight:400}
 .exp{display:grid;grid-template-columns:1fr 140px;gap:8px;align-items:center;padding:10px 12px}
 button{margin:20px auto 0;display:block;font-size:16px;padding:10px 22px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+.exp+.exp{border-top:1px solid var(--line)}
+#depline{margin-top:4px;font-weight:700;font-size:19px;text-align:center;color:var(--accent)}
+#depline:empty{display:none}
+.drow{display:grid;grid-template-columns:1fr 118px 104px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);border-left:4px solid transparent}
+.drow.sel{border-left-color:var(--accent);background:rgba(61,220,132,.10)}
+.drow:not(.sel) .lbl{color:var(--muted)}
+.step{display:flex;align-items:center;justify-content:center;gap:10px}
+.step b{min-width:24px;text-align:center;font-size:20px}
+.step button{margin:0;display:inline-block;font-size:22px;padding:4px 14px;line-height:1.2}
+.dnote{padding:12px;font-weight:600;font-size:18px}
+.dnote.ok{color:var(--accent)}
+.dnote.off{color:var(--bad)}
+.dnote.small{font-weight:400;color:var(--muted);font-size:13px;padding-top:0}
+.dnote button{margin:10px 0 0;font-size:14px;padding:6px 14px}
 </style>
 </head>
 <body>
 <header>
   <div class="top"><span>Total en caisse</span><div id="total">0,00 $</div></div>
   <div id="diff"></div>
+  <div id="depline"></div>
 </header>
 <main id="app"></main>
 <button id="reset">Tout effacer</button>
@@ -54,19 +70,26 @@ var GROUPS=[
 ];
 var qty={},expected="",total=0;
 try{qty=JSON.parse(localStorage.getItem("caisseqty")||"{}")||{};expected=localStorage.getItem("caisseexp")||""}catch(e){qty={}}
+// Montant à garder en caisse, en cents (20000 = 200,00 $). Change ce nombre pour le modifier.
+var KEEP=20000;
+var man=null;
+var DEN=[["100 $",10000],["50 $",5000],["20 $",2000],["10 $",1000],["5 $",500],["2 $",200],["1 $",100],["0,25 $",25],["0,10 $",10],["0,05 $",5]];
 function fmt(c){var neg=c<0;c=Math.abs(c);return (neg?"−":"")+(c/100).toLocaleString("fr-CA",{minimumFractionDigits:2,maximumFractionDigits:2})+" $"}
 function fe(d){if(!d)return "";var p=d.padStart(3,"0");return p.slice(0,-2)+","+p.slice(-2)}
 function save(){try{localStorage.setItem("caisseqty",JSON.stringify(qty));localStorage.setItem("caisseexp",expected)}catch(e){}}
 var app=document.getElementById("app"),totalEl=document.getElementById("total"),diffEl=document.getElementById("diff");
 var lineEls={};
 // expected amount
-var eh=document.createElement("h2");eh.innerHTML="<span>Montant attendu</span>";app.appendChild(eh);
+var eh=document.createElement("h2");eh.innerHTML="<span>Comparaison et dépôt</span>";app.appendChild(eh);
 var ec=document.createElement("div");ec.className="card";
 ec.innerHTML="<div class='exp'><div class='lbl'>Devrait y avoir<small>ex. 350,00</small></div></div>";
 var einp=document.createElement("input");einp.type="text";einp.inputMode="numeric";einp.placeholder="0,00";expected=expected.replace(/\D/g,"").replace(/^0+/,"");einp.value=fe(expected);
 einp.addEventListener("input",function(){expected=einp.value.replace(/\D/g,"").replace(/^0+/,"");einp.value=fe(expected);save();calc()});
 einp.addEventListener("focus",function(){einp.select()});
-ec.firstChild.appendChild(einp);app.appendChild(ec);
+ec.firstChild.appendChild(einp);
+var kr=document.createElement("div");kr.className="exp";
+kr.innerHTML="<div class='lbl'>À garder en caisse<small>le reste va au dépôt</small></div>";
+kr.insertAdjacentHTML("beforeend","<div class='amt'>"+fmt(KEEP)+"</div>");ec.appendChild(kr);app.appendChild(ec);
 GROUPS.forEach(function(g,gi){
   var h=document.createElement("h2");h.innerHTML="<span>"+g.name+"</span><span id='sub"+gi+"'>0,00 $</span>";
   app.appendChild(h);
@@ -85,6 +108,64 @@ GROUPS.forEach(function(g,gi){
   });
   app.appendChild(card);
 });
+var curSel=[],curCnt=[],depEl=document.createElement("div");app.appendChild(depEl);
+var deplineEl=document.getElementById("depline");
+// Exact combination (units of 5 cents), biggest bills/coins first; falls back to greedy if impossible
+function plan(cnt,amt){
+  var u=DEN.map(function(x){return x[1]/5}),n=u.length,memo={};
+  function f(i,r){
+    if(r===0)return true;
+    if(i>=n)return false;
+    var key=i+":"+r;
+    if(key in memo)return memo[key];
+    var ok=false,mx=Math.min(cnt[i],Math.floor(r/u[i]));
+    for(var k=mx;k>=0;k--){if(f(i+1,r-k*u[i])){ok=true;break}}
+    memo[key]=ok;return ok;
+  }
+  var res=[],r=amt,i,k,mx;
+  if(f(0,r)){
+    for(i=0;i<n;i++){mx=Math.min(cnt[i],Math.floor(r/u[i]));res[i]=0;for(k=mx;k>=0;k--){if(f(i+1,r-k*u[i])){res[i]=k;r-=k*u[i];break}}}
+    return {sel:res,exact:true};
+  }
+  r=amt;
+  for(i=0;i<n;i++){k=Math.min(cnt[i],Math.floor(r/u[i]));res[i]=k;r-=k*u[i]}
+  return {sel:res,exact:false};
+}
+function deposit(tot){
+  var K=KEEP,amt=tot-K;
+  var h="<h2><span>Dépôt</span><span>"+(amt>0?fmt(amt):"")+"</span></h2><div class='card'>";
+  if(amt<=0){
+    deplineEl.textContent="";
+    h+="<div class='dnote'>"+(amt===0?"Rien à déposer : la caisse est à "+fmt(K)+".":"Pas de dépôt : il manque "+fmt(-amt)+" pour atteindre "+fmt(K)+".")+"</div></div>";
+    depEl.innerHTML=h;curSel=[];curCnt=[];return;
+  }
+  deplineEl.textContent="Dépôt à faire : "+fmt(amt);
+  var cnt=DEN.map(function(x){return parseInt(lineEls[x[0]].inp.value||"0",10)||0});
+  var auto=plan(cnt,Math.floor(amt/5)),sel,S=0;
+  if(man){sel=man.map(function(v,i){return Math.min(v,cnt[i])})}else{sel=auto.sel}
+  var rows=[];
+  DEN.forEach(function(x,i){
+    S+=sel[i]*x[1];
+    if(!cnt[i]&&!sel[i])return;
+    rows[i]="<div class='drow"+(sel[i]?" sel":"")+"'><div class='lbl'>"+x[0]+"<small>compté : "+cnt[i]+" · reste : "+(cnt[i]-sel[i])+"</small></div>"
+     +"<div class='step'><button data-i='"+i+"' data-d='-1'>−</button><b>"+sel[i]+"</b><button data-i='"+i+"' data-d='1'>+</button></div>"
+     +"<div class='amt"+(sel[i]?"":" zero")+"'>"+fmt(sel[i]*x[1])+"</div></div>";
+  });
+  h+=rows.filter(Boolean).reverse().join("");
+  var d=S-amt,cls,msg;
+  if(d===0){cls="ok";msg="✓ Dépôt complet : "+fmt(S)+"<br>Reste en caisse : "+fmt(tot-S)}
+  else if(d<0){cls="off";msg="Il reste "+fmt(-d)+" à choisir"+(!man&&!auto.exact?"<br>Impossible d'atteindre ce montant exact avec ce qui est compté.":"")}
+  else{cls="off";msg="Trop de "+fmt(d)+" : la caisse serait à "+fmt(tot-S)}
+  h+="<div class='dnote "+cls+"'>"+msg+(man?"<br><button id='autobtn'>Remettre la suggestion</button>":"")+"</div>";
+  h+="</div>";
+  depEl.innerHTML=h;curSel=sel;curCnt=cnt;
+}
+depEl.addEventListener("click",function(ev){
+  var b=ev.target.closest?ev.target.closest("button"):null;if(!b)return;
+  if(b.id==="autobtn"){man=null;calc();return}
+  var i=parseInt(b.getAttribute("data-i"),10),dd=parseInt(b.getAttribute("data-d"),10);
+  man=curSel.slice();man[i]=Math.max(0,Math.min(curCnt[i],man[i]+dd));calc();
+});
 function calc(){
   var sub=[0,0,0],tot=0;
   Object.keys(lineEls).forEach(function(k){
@@ -94,6 +175,7 @@ function calc(){
   });
   sub.forEach(function(s,i){document.getElementById("sub"+i).textContent=fmt(s)});
   totalEl.textContent=fmt(tot);
+  deposit(tot);
   if(expected===""){diffEl.className="";diffEl.textContent="";return}
   var ec=parseInt(expected,10),d=tot-ec;
   if(d===0){diffEl.className="ok";diffEl.textContent="✓ Ça balance"}
@@ -102,7 +184,7 @@ function calc(){
 }
 document.getElementById("reset").addEventListener("click",function(){
   if(!confirm("Tout effacer ?"))return;
-  qty={};expected="";einp.value="";save();
+  qty={};expected="";einp.value="";man=null;save();
   Object.keys(lineEls).forEach(function(k){lineEls[k].inp.value=""});
   calc();
 });
