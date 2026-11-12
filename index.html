@@ -41,9 +41,13 @@ button{margin:20px auto 0;display:block;font-size:16px;padding:10px 22px;border-
 .exp+.exp{border-top:1px solid var(--line)}
 #depline{margin-top:4px;font-weight:700;font-size:19px;text-align:center;color:var(--accent)}
 #depline:empty{display:none}
-.drow{display:grid;grid-template-columns:1fr 118px 104px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);border-left:4px solid transparent}
+.drow{display:grid;grid-template-columns:1fr 46px 118px 46px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);border-left:4px solid transparent}
 .drow.sel{border-left-color:var(--accent);background:rgba(61,220,132,.10)}
 .drow:not(.sel) .lbl{color:var(--muted)}
+.dh{display:grid;grid-template-columns:1fr 46px 118px 46px;gap:8px;padding:10px 12px 4px 16px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center}
+.num{text-align:center;font-size:20px;font-variant-numeric:tabular-nums}
+.num.muted{color:var(--muted)}
+.num.rest{font-weight:700}
 .step{display:flex;align-items:center;justify-content:center;gap:10px}
 .step b{min-width:24px;text-align:center;font-size:20px}
 .step button{margin:0;display:inline-block;font-size:22px;padding:4px 14px;line-height:1.2}
@@ -147,11 +151,12 @@ function deposit(tot){
   DEN.forEach(function(x,i){
     S+=sel[i]*x[1];
     if(!cnt[i]&&!sel[i])return;
-    rows[i]="<div class='drow"+(sel[i]?" sel":"")+"'><div class='lbl'>"+x[0]+"<small>compté : "+cnt[i]+" · reste : "+(cnt[i]-sel[i])+"</small></div>"
+    rows[i]="<div class='drow"+(sel[i]?" sel":"")+"'><div class='lbl'>"+x[0]+(sel[i]?"<small>"+fmt(sel[i]*x[1])+"</small>":"")+"</div>"
+     +"<div class='num muted'>"+cnt[i]+"</div>"
      +"<div class='step'><button data-i='"+i+"' data-d='-1'>−</button><b>"+sel[i]+"</b><button data-i='"+i+"' data-d='1'>+</button></div>"
-     +"<div class='amt"+(sel[i]?"":" zero")+"'>"+fmt(sel[i]*x[1])+"</div></div>";
+     +"<div class='num rest'>"+(cnt[i]-sel[i])+"</div></div>";
   });
-  h+=rows.filter(Boolean).reverse().join("");
+  h+="<div class='dh'><div></div><div>Compté</div><div>Dépôt</div><div>Reste</div></div>"+rows.filter(Boolean).reverse().join("");
   var d=S-amt,cls,msg;
   if(d===0){cls="ok";msg="✓ Dépôt complet : "+fmt(S)+"<br>Reste en caisse : "+fmt(tot-S)}
   else if(d<0){cls="off";msg="Il reste "+fmt(-d)+" à choisir"+(!man&&!auto.exact?"<br>Impossible d'atteindre ce montant exact avec ce qui est compté.":"")}
