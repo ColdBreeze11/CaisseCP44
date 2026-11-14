@@ -56,6 +56,7 @@ button{margin:20px auto 0;display:block;font-size:16px;padding:10px 22px;border-
 .dnote.off{color:var(--bad)}
 .dnote.small{font-weight:400;color:var(--muted);font-size:13px;padding-top:0}
 .dnote button{margin:10px 0 0;font-size:14px;padding:6px 14px}
+#share{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
@@ -65,6 +66,7 @@ button{margin:20px auto 0;display:block;font-size:16px;padding:10px 22px;border-
   <div id="depline"></div>
 </header>
 <main id="app"></main>
+<button id="share">Partager le décompte</button>
 <button id="reset">Tout effacer</button>
 <script>
 var GROUPS=[
@@ -193,7 +195,65 @@ document.getElementById("reset").addEventListener("click",function(){
   Object.keys(lineEls).forEach(function(k){lineEls[k].inp.value=""});
   calc();
 });
+// ---- Partage (instantané : texte + lien contenant les chiffres) ----
+var ALLKEYS=[];GROUPS.forEach(function(g){g.items.forEach(function(it){ALLKEYS.push(it[0])})});
+function cnts(){return ALLKEYS.map(function(k){return parseInt(lineEls[k].inp.value||"0",10)||0})}
+function totalOf(q){var t=0;ALLKEYS.forEach(function(k,i){t+=q[i]*lineEls[k].val});return t}
+function b64e(o){return btoa(JSON.stringify(o)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
+function b64d(t){t=t.replace(/-/g,"+").replace(/_/g,"/");while(t.length%4)t+="=";return JSON.parse(atob(t))}
+function dstr(dt){try{return dt.toLocaleString("fr-CA",{dateStyle:"medium",timeStyle:"short"})}catch(e){return dt.toLocaleString()}}
+function summary(){
+  var q=cnts(),tot=totalOf(q),L=[];
+  L.push("Caisse – "+dstr(new Date()),"Total en caisse : "+fmt(tot));
+  if(expected!==""){var d=tot-parseInt(expected,10);L.push("Attendu : "+fmt(parseInt(expected,10))+" → "+(d===0?"ça balance":(d>0?"surplus de ":"manque de ")+fmt(Math.abs(d))))}
+  GROUPS.forEach(function(g){
+    var lines=[];
+    g.items.forEach(function(it){var n=q[ALLKEYS.indexOf(it[0])];if(n)lines.push(it[0]+" × "+n+" = "+fmt(n*Number(it[1])))});
+    if(lines.length){L.push("","— "+g.name+" —");L=L.concat(lines)}
+  });
+  if(curSel.length){
+    var S=0,dl=[],al=[];
+    for(var i=DEN.length-1;i>=0;i--){
+      S+=curSel[i]*DEN[i][1];
+      if(curSel[i])dl.push(DEN[i][0]+" × "+curSel[i]);
+      if(curCnt[i]-curSel[i]>0)al.push(DEN[i][0]+" × "+(curCnt[i]-curSel[i]));
+    }
+    GROUPS[2].items.forEach(function(it){var n=q[ALLKEYS.indexOf(it[0])];if(n)al.push(it[0]+" × "+n)});
+    L.push("","— DÉPÔT : "+fmt(S)+" —");L=L.concat(dl);
+    L.push("","— RESTE EN CAISSE : "+fmt(tot-S)+" —");L=L.concat(al);
+  }
+  return L.join("\n");
+}
+function copyFallback(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){alert("Copié. Colle-le dans un message.")},function(){prompt("Copie ce texte :",text)})}
+  else prompt("Copie ce texte :",text);
+}
+document.getElementById("share").addEventListener("click",function(){
+  var snap={v:1,q:cnts(),e:expected,m:man?curSel.slice():null,t:new Date().toISOString()};
+  var link=location.href.split("#")[0]+"#s="+b64e(snap);
+  var text=summary()+"\n\nOuvrir ce décompte dans l'app :\n"+link;
+  if(navigator.share){navigator.share({title:"Caisse",text:text}).catch(function(err){if(err&&err.name!=="AbortError")copyFallback(text)})}
+  else copyFallback(text);
+});
+function importShared(){
+  var h=location.hash;if(h.indexOf("#s=")!==0)return;
+  var data=null;
+  try{data=b64d(h.slice(3))}catch(e){}
+  try{history.replaceState(null,"",location.href.split("#")[0])}catch(e){}
+  function okInt(n){return Number.isInteger(n)&&n>=0&&n<=99999}
+  var ok=data&&data.v===1&&Array.isArray(data.q)&&data.q.length===ALLKEYS.length&&data.q.every(okInt)
+    &&typeof data.e==="string"&&/^\d{0,9}$/.test(data.e)
+    &&(data.m===null||(Array.isArray(data.m)&&data.m.length===DEN.length&&data.m.every(okInt)));
+  if(!ok){alert("Ce lien de partage n'est pas valide.");return}
+  var dt=new Date(data.t),when=isNaN(dt)?"":" du "+dstr(dt);
+  if(!confirm("Charger le décompte partagé"+when+" ?\nTotal : "+fmt(totalOf(data.q))+"\nCela remplace les chiffres actuellement à l'écran."))return;
+  ALLKEYS.forEach(function(k,i){var v=data.q[i]?String(data.q[i]):"";lineEls[k].inp.value=v;qty[k]=v});
+  expected=data.e.replace(/^0+/,"");einp.value=fe(expected);
+  man=data.m;save();calc();
+}
+window.addEventListener("hashchange",importShared);
 calc();
+importShared();
 </script>
 <script>
 if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
