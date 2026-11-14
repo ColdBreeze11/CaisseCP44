@@ -202,6 +202,31 @@ function totalOf(q){var t=0;ALLKEYS.forEach(function(k,i){t+=q[i]*lineEls[k].val
 function b64e(o){return btoa(JSON.stringify(o)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
 function b64d(t){t=t.replace(/-/g,"+").replace(/_/g,"/");while(t.length%4)t+="=";return JSON.parse(atob(t))}
 function dstr(dt){try{return dt.toLocaleString("fr-CA",{dateStyle:"medium",timeStyle:"short"})}catch(e){return dt.toLocaleString()}}
+// Lien compact (v2) : octets en varint -> base64url
+var EPOCH=Date.UTC(2025,0,1);
+function pushV(a,n){while(n>=128){a.push((n&127)|128);n=Math.floor(n/128)}a.push(n)}
+function packSnap(q,e,m,t){
+  var a=[2,m?1:0];
+  q.forEach(function(n){pushV(a,n)});
+  pushV(a,e===""?0:parseInt(e,10)+1);
+  if(m)m.forEach(function(n){pushV(a,n)});
+  pushV(a,Math.max(0,Math.round((t-EPOCH)/60000)));
+  return btoa(String.fromCharCode.apply(null,a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function unpackSnap(txt){
+  txt=txt.replace(/-/g,"+").replace(/_/g,"/");while(txt.length%4)txt+="=";
+  var b=atob(txt),a=[],p=0,i;
+  for(i=0;i<b.length;i++)a.push(b.charCodeAt(i));
+  function rv(){var n=0,mul=1,c;do{c=a[p++];if(c===undefined)throw 0;n+=(c&127)*mul;mul*=128}while(c&128);return n}
+  if(rv()!==2)throw 0;
+  var fl=rv(),q=[],m=null,j;
+  for(j=0;j<ALLKEYS.length;j++)q.push(rv());
+  var ev=rv();
+  if(fl&1){m=[];for(j=0;j<DEN.length;j++)m.push(rv())}
+  var mins=rv();
+  if(p!==a.length)throw 0;
+  return {v:1,q:q,e:ev===0?"":String(ev-1),m:m,t:new Date(EPOCH+mins*60000).toISOString()};
+}
 function summary(){
   var q=cnts(),tot=totalOf(q),L=[];
   L.push("Caisse – "+dstr(new Date()),"Total en caisse : "+fmt(tot));
@@ -229,16 +254,16 @@ function copyFallback(text){
   else prompt("Copie ce texte :",text);
 }
 document.getElementById("share").addEventListener("click",function(){
-  var snap={v:1,q:cnts(),e:expected,m:man?curSel.slice():null,t:new Date().toISOString()};
-  var link=location.href.split("#")[0]+"#s="+b64e(snap);
+  var link=location.href.split("#")[0]+"#x"+packSnap(cnts(),expected,man?curSel.slice():null,Date.now());
   var text=summary()+"\n\nOuvrir ce décompte dans l'app :\n"+link;
   if(navigator.share){navigator.share({title:"Caisse",text:text}).catch(function(err){if(err&&err.name!=="AbortError")copyFallback(text)})}
   else copyFallback(text);
 });
 function importShared(){
-  var h=location.hash;if(h.indexOf("#s=")!==0)return;
-  var data=null;
-  try{data=b64d(h.slice(3))}catch(e){}
+  var h=location.hash,data=null;
+  if(h.indexOf("#x")===0){try{data=unpackSnap(h.slice(2))}catch(e){}}
+  else if(h.indexOf("#s=")===0){try{data=b64d(h.slice(3))}catch(e){}}
+  else return;
   try{history.replaceState(null,"",location.href.split("#")[0])}catch(e){}
   function okInt(n){return Number.isInteger(n)&&n>=0&&n<=99999}
   var ok=data&&data.v===1&&Array.isArray(data.q)&&data.q.length===ALLKEYS.length&&data.q.every(okInt)
