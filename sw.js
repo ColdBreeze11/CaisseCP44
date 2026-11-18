@@ -1,7 +1,10 @@
-var CACHE = "caissecp44-v9";
+var CACHE = "caissecp44-v10";
 var FILES = ["./", "index.html", "manifest.json", "icon-180.png", "icon-512.png"];
 self.addEventListener("install", function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));
+  // "reload" = ignore the browser's HTTP cache so we never store a stale copy
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(FILES.map(function (f) { return new Request(f, { cache: "reload" }); }));
+  }));
   self.skipWaiting();
 });
 self.addEventListener("activate", function (e) {
@@ -10,14 +13,20 @@ self.addEventListener("activate", function (e) {
   }));
   self.clients.claim();
 });
-// Network first (so updates arrive), cache as fallback when offline
+// Network first, always revalidated (so updates show up right away); cache only as offline fallback
 self.addEventListener("fetch", function (e) {
   if (e.request.method !== "GET") return;
+  var url = new URL(e.request.url);
+  if (url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then(function (r) {
-      var copy = r.clone();
-      caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+    fetch(e.request.url, { cache: "no-cache" }).then(function (r) {
+      if (r.ok && !url.search) {
+        var copy = r.clone();
+        caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+      }
       return r;
-    }).catch(function () { return caches.match(e.request).then(function (m) { return m || caches.match("index.html"); }); })
+    }).catch(function () {
+      return caches.match(e.request, { ignoreSearch: true }).then(function (m) { return m || caches.match("index.html"); });
+    })
   );
 });
